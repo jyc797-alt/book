@@ -32,4 +32,7 @@ export interface ApiResponse<T = any> {
   message: string;
   data?: T;
   reservationNumber?: string;
+  reservation?: Reservation;
+  reservations?: Reservation[];
+  emailSent?: boolean;
 }

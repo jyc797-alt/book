@@ -34,7 +34,7 @@ export const Header: React.FC<HeaderProps> = ({
                 </span>
               </div>
               <p className="text-xs text-slate-500 mt-1">
-                인천교육대학교 도서관 열람실 실시간 예약 시스템
+                새별오름 도서관 열람실 실시간 예약 시스템
               </p>
             </div>
           </div>

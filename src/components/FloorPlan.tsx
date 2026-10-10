@@ -8,12 +8,17 @@ import {
   LayoutGrid, Map, Coffee, CheckCircle2
 } from 'lucide-react';
 
-// Generated image assets
-const ZONE_IMAGES = {
-  window: '/src/assets/images/zone_window_seat_1791530210208.jpg',
-  main: '/src/assets/images/zone_main_hall_1791530221198.jpg',
-  laptop: '/src/assets/images/zone_laptop_digital_1791530231339.jpg',
-  study: '/src/assets/images/zone_group_study_1791530240540.jpg',
+import zoneWindowImg from '../assets/images/zone_window_seat_1791530210208.jpg';
+import zoneMainImg from '../assets/images/zone_main_hall_1791530221198.jpg';
+import zoneLaptopImg from '../assets/images/zone_laptop_digital_1791530231339.jpg';
+import zoneStudyImg from '../assets/images/zone_group_study_1791530240540.jpg';
+
+// Zone image assets
+const ZONE_IMAGES: Record<string, string> = {
+  window: zoneWindowImg,
+  main: zoneMainImg,
+  laptop: zoneLaptopImg,
+  study: zoneStudyImg,
 };
 
 interface FloorPlanProps {
@@ -422,7 +427,7 @@ export const FloorPlan: React.FC<FloorPlanProps> = ({
             {/* Bottom Hall Details */}
             <div className="mt-4 pt-3 border-t border-slate-200 text-[11px] text-slate-400 flex items-center justify-between">
               <span>🚪 메인 출입 게이트 & 도서 무인 반납기 위치</span>
-              <span>인천교육대학교 도서관 열람실</span>
+              <span>새별오름 도서관 열람실</span>
             </div>
           </div>
         </div>

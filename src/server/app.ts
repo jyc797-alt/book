@@ -6,6 +6,17 @@ export const app = express();
 
 app.use(express.json());
 
+// Enable CORS for API routes
+app.use((req, res, next) => {
+  res.header('Access-Control-Allow-Origin', '*');
+  res.header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+  res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+  if (req.method === 'OPTIONS') {
+    return res.sendStatus(200);
+  }
+  next();
+});
+
 // In-memory store
 let reservations: Reservation[] = [...INITIAL_RESERVATIONS];
 let customGasUrl: string = DEFAULT_GAS_URL;
@@ -56,8 +67,19 @@ export function isSameSeat(item1: string, item2: string): boolean {
   return false;
 }
 
+const apiRouter = express.Router();
+
+// Root status
+apiRouter.get('/', (_req: Request, res: Response) => {
+  res.json({
+    ok: true,
+    service: '새별오름 도서관 좌석 및 도서 예약 시스템 API',
+    spreadsheetId: SPREADSHEET_ID,
+  });
+});
+
 // 1. Get seat reservation status for a specific date
-app.get('/api/seats/status', async (req: Request, res: Response) => {
+apiRouter.get('/seats/status', async (req: Request, res: Response) => {
   try {
     const targetDate = normalizeDateStr(req.query.date || new Date());
     const reservedSet = new Set<string>();
@@ -85,7 +107,7 @@ app.get('/api/seats/status', async (req: Request, res: Response) => {
 });
 
 // 2. Search reservations by email
-app.get('/api/reservations', async (req: Request, res: Response) => {
+apiRouter.get('/reservations', async (req: Request, res: Response) => {
   try {
     const email = String(req.query.email || '').trim().toLowerCase();
     if (!email) {
@@ -107,7 +129,7 @@ app.get('/api/reservations', async (req: Request, res: Response) => {
 });
 
 // 3. Get all reservations
-app.get('/api/reservations/all', async (_req: Request, res: Response) => {
+apiRouter.get('/reservations/all', async (_req: Request, res: Response) => {
   res.json({
     ok: true,
     spreadsheetId: SPREADSHEET_ID,
@@ -117,7 +139,7 @@ app.get('/api/reservations/all', async (_req: Request, res: Response) => {
 });
 
 // 4. Books list
-app.get('/api/books', async (_req: Request, res: Response) => {
+apiRouter.get('/books', async (_req: Request, res: Response) => {
   res.json({
     ok: true,
     books: LIBRARY_BOOKS,
@@ -125,7 +147,7 @@ app.get('/api/books', async (_req: Request, res: Response) => {
 });
 
 // 5. Reserve Seat/Book with duplicate prevention and email status
-app.post('/api/reserve', async (req: Request, res: Response) => {
+apiRouter.post('/reserve', async (req: Request, res: Response) => {
   try {
     const { bookOrSeatName, userName, userEmail, reservationDate, timeSlot } = req.body;
 
@@ -211,7 +233,7 @@ app.post('/api/reserve', async (req: Request, res: Response) => {
 });
 
 // 6. Cancel reservation
-app.post('/api/cancel', async (req: Request, res: Response) => {
+apiRouter.post('/cancel', async (req: Request, res: Response) => {
   try {
     const { reservationNumber, email } = req.body;
 
@@ -261,19 +283,23 @@ app.post('/api/cancel', async (req: Request, res: Response) => {
 });
 
 // 7. GAS Configuration
-app.get('/api/gas/config', (_req: Request, res: Response) => {
+apiRouter.get('/gas/config', (_req: Request, res: Response) => {
   res.json({
     spreadsheetId: SPREADSHEET_ID,
     gasUrl: customGasUrl,
   });
 });
 
-app.post('/api/gas/config', (req: Request, res: Response) => {
+apiRouter.post('/gas/config', (req: Request, res: Response) => {
   const { gasUrl } = req.body;
   if (gasUrl) {
     customGasUrl = String(gasUrl).trim();
   }
   res.json({ ok: true, message: 'GAS URL이 업데이트되었습니다.', gasUrl: customGasUrl });
 });
+
+// Mount router on both '/api' and '/' for maximum compatibility with Vercel rewrites & direct routes
+app.use('/api', apiRouter);
+app.use('/', apiRouter);
 
 export default app;

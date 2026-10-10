@@ -319,12 +319,12 @@ function sendConfirmationEmail(info) {
     const bookTitle = bookMatch ? bookMatch[1].trim() : null;
     const cleanSeatName = seatFullName.replace(/\\(도서:.*?\\)/g, '').trim();
 
-    const subject = '[인천교대 도서관] 좌석 예약 및 도서 대출 신청 완료 (' + reservationNumber + ')';
+    const subject = '[새별오름 도서관] 좌석 예약 및 도서 대출 신청 완료 (' + reservationNumber + ')';
 
     const htmlBody = 
       '<div style="font-family: -apple-system, BlinkMacSystemFont, \\'Malgun Gothic\\', sans-serif; max-width: 600px; margin: 0 auto; padding: 24px; border: 1px solid #e2e8f0; border-radius: 14px; background-color: #ffffff;">' +
         '<div style="border-bottom: 2px solid #2563eb; padding-bottom: 16px; margin-bottom: 20px;">' +
-          '<h2 style="color: #1e3a8a; margin: 0; font-size: 20px;">📚 인천교육대학교 도서관 예약 완료 안내</h2>' +
+          '<h2 style="color: #1e3a8a; margin: 0; font-size: 20px;">📚 새별오름 도서관 예약 완료 안내</h2>' +
           '<p style="color: #64748b; font-size: 13px; margin: 6px 0 0 0;">신청하신 좌석 예약 및 도서 대출 상황 안내 메일입니다.</p>' +
         '</div>' +
 
@@ -373,7 +373,7 @@ function sendConfirmationEmail(info) {
         '</div>' +
 
         '<div style="text-align: center; border-top: 1px solid #e2e8f0; padding-top: 14px; font-size: 11px; color: #94a3b8;">' +
-          '인천교육대학교 도서관 자동 발송 시스템' +
+          '새별오름 도서관 자동 발송 시스템' +
         '</div>' +
       '</div>';
 

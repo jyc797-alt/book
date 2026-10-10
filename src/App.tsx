@@ -11,6 +11,7 @@ import {
   Search, ShieldCheck, 
   Sparkles, CheckCircle2, Mail 
 } from 'lucide-react';
+import heroBannerImg from './assets/images/library_hero_banner_1791530199466.jpg';
 
 export default function App() {
   const [selectedDate, setSelectedDate] = useState<string>('2026-10-09');
@@ -118,7 +119,7 @@ export default function App() {
         <div className="relative rounded-3xl overflow-hidden mb-8 shadow-md border border-slate-200/80 bg-slate-900 min-h-[220px] sm:min-h-[260px] flex items-end">
           {/* Background Image */}
           <img
-            src="/src/assets/images/library_hero_banner_1791530199466.jpg"
+            src={heroBannerImg}
             alt="도서관 열람실 전경"
             referrerPolicy="no-referrer"
             className="absolute inset-0 w-full h-full object-cover opacity-60"
@@ -236,7 +237,7 @@ export default function App() {
       {/* Footer */}
       <footer className="mt-12 bg-white border-t border-slate-200 py-6 text-center text-xs text-slate-500">
         <div className="max-w-7xl mx-auto px-4 flex flex-col sm:flex-row items-center justify-between gap-3">
-          <p>© 2026 인천교육대학교 도서관 좌석 및 도서 예약 시스템</p>
+          <p>© 2026 새별오름 도서관 좌석 및 도서 예약 시스템</p>
           <div className="flex items-center gap-2 text-slate-400">
             <span>스프레드시트 실시간 연동 중</span>
             <span>•</span>
