@@ -238,10 +238,17 @@ export default function App() {
       <footer className="mt-12 bg-white border-t border-slate-200 py-6 text-center text-xs text-slate-500">
         <div className="max-w-7xl mx-auto px-4 flex flex-col sm:flex-row items-center justify-between gap-3">
           <p>© 2026 새별오름 도서관 좌석 및 도서 예약 시스템</p>
-          <div className="flex items-center gap-2 text-slate-400">
+          <div className="flex items-center gap-3 text-slate-400">
             <span>스프레드시트 실시간 연동 중</span>
             <span>•</span>
             <span>예약 내역 자동 이메일 발송</span>
+            <span>•</span>
+            <button
+              onClick={() => setIsGasCodeOpen(true)}
+              className="text-blue-600 hover:text-blue-800 underline transition cursor-pointer font-medium"
+            >
+              Code.gs 스크립트 확인
+            </button>
           </div>
         </div>
       </footer>

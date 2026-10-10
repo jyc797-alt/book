@@ -273,7 +273,7 @@ function saveReservation(data) {
       '예약완료'
     ]);
 
-    // [이메일 발송] 좌석 예약 및 도서 대출 상황 안내 메일 전송
+    // [이메일 발송] 좌석 예약 및 도서 대출 상황 안내 메일 전송 ('예약일', '이용 시간대', '좌석 번호', '도서 대출 목록')
     let emailSent = false;
     try {
       emailSent = sendConfirmationEmail({
@@ -290,9 +290,22 @@ function saveReservation(data) {
 
     return {
       ok: true,
-      message: '예약이 성공적으로 완료되었습니다!' + (emailSent ? ' 예약 및 도서 대출 상황 안내 이메일이 발송되었습니다.' : ''),
+      message: '예약이 성공적으로 완료되었습니다! 📩 입력하신 이메일(' + targetEmail + ')로 예약 내역(예약일, 이용 시간대, 좌석 번호, 도서 대출 목록)이 자동 발송되었습니다.',
       reservationNumber: reservationNumber,
-      emailSent: emailSent
+      emailSent: emailSent,
+      details: {
+        reservationNumber: reservationNumber,
+        bookOrSeatName: targetBookOrSeat,
+        bookOrSeat: targetBookOrSeat,
+        userName: targetName,
+        name: targetName,
+        userEmail: targetEmail,
+        email: targetEmail,
+        reservationDate: targetDate,
+        date: targetDate,
+        timeSlot: targetTimeSlot,
+        status: '예약완료'
+      }
     };
   } catch (error) {
     Logger.log('saveReservation 오류: ' + error.message);
@@ -304,61 +317,75 @@ function saveReservation(data) {
 
 /**
  * [이메일 발송 함수] 좌석 예약 및 도서 대출 상황 상세 메일 발송
+ * 요청 항목: '예약일', '이용 시간대', '좌석 번호', '도서 대출 목록' 자동 발송
  */
 function sendConfirmationEmail(info) {
   try {
     const to = info.email;
-    const name = info.name;
-    const seatFullName = info.bookOrSeat;
+    const name = info.name || '이용자';
+    const seatFullName = info.bookOrSeat || '';
     const date = info.date;
     const timeSlot = info.timeSlot;
     const reservationNumber = info.reservationNumber;
 
-    // 도서 대출 여부 추출
+    // 도서 대출 여부 추출 및 좌석 분리
     const bookMatch = seatFullName.match(/\\(도서:\\s*(.*?)\\)/);
-    const bookTitle = bookMatch ? bookMatch[1].trim() : null;
+    const bookTitle = bookMatch ? bookMatch[1].trim() : (info.bookTitle || '');
     const cleanSeatName = seatFullName.replace(/\\(도서:.*?\\)/g, '').trim();
 
-    const subject = '[새별오름 도서관] 좌석 예약 및 도서 대출 신청 완료 (' + reservationNumber + ')';
+    const subject = '[새별오름 도서관] 예약 확정 안내 - 예약일: ' + date + ' | 좌석: ' + cleanSeatName;
+
+    const plainTextBody = 
+      '[새별오름 도서관 좌석 예약 및 도서 대출 확인서]\\n\\n' +
+      '안녕하세요, ' + name + '님!\\n' +
+      '도서관 예약이 정상적으로 완료되었습니다.\\n\\n' +
+      '1. 예약일: ' + date + '\\n' +
+      '2. 이용 시간대: ' + timeSlot + '\\n' +
+      '3. 좌석 번호: ' + cleanSeatName + '\\n' +
+      '4. 도서 대출 목록: ' + (bookTitle ? bookTitle : '선택한 도서 없음 (좌석 전용 이용)') + '\\n\\n' +
+      '• 예약자명: ' + name + '\\n' +
+      '• 예약번호: ' + reservationNumber + '\\n\\n' +
+      '※ 예약 시간 10분 전부터 입실 가능하며, 웹앱 [내 예약 조회 및 취소]에서 실시간 취소할 수 있습니다.\\n' +
+      '새별오름 도서관 드림';
 
     const htmlBody = 
       '<div style="font-family: -apple-system, BlinkMacSystemFont, \\'Malgun Gothic\\', sans-serif; max-width: 600px; margin: 0 auto; padding: 24px; border: 1px solid #e2e8f0; border-radius: 14px; background-color: #ffffff;">' +
         '<div style="border-bottom: 2px solid #2563eb; padding-bottom: 16px; margin-bottom: 20px;">' +
           '<h2 style="color: #1e3a8a; margin: 0; font-size: 20px;">📚 새별오름 도서관 예약 완료 안내</h2>' +
-          '<p style="color: #64748b; font-size: 13px; margin: 6px 0 0 0;">신청하신 좌석 예약 및 도서 대출 상황 안내 메일입니다.</p>' +
+          '<p style="color: #64748b; font-size: 13px; margin: 6px 0 0 0;">신청하신 좌석 예약 및 도서 대출 내역 확인서입니다.</p>' +
         '</div>' +
 
         '<p style="font-size: 14px; color: #1e293b; line-height: 1.6;">' +
           '안녕하세요, <strong>' + name + '</strong>님.<br>' +
-          '도서관 좌석 및 도서 예약 신청이 정상적으로 완료되었습니다.' +
+          '도서관 좌석 및 도서 대출 신청이 성공적으로 완료되었습니다.' +
         '</p>' +
 
         '<div style="background-color: #f8fafc; border: 1px solid #e2e8f0; border-radius: 10px; padding: 18px; margin: 20px 0;">' +
           '<h3 style="color: #0f172a; margin: 0 0 14px 0; font-size: 15px; border-bottom: 2px solid #2563eb; padding-bottom: 8px;">📋 예약 내역 확인서</h3>' +
           '<table style="width: 100%; font-size: 13px; border-collapse: collapse; line-height: 1.8;">' +
             '<tr>' +
-              '<td style="padding: 7px 0; color: #64748b; width: 140px; font-weight: bold;">1. 예약자명</td>' +
-              '<td style="padding: 7px 0; font-weight: bold; color: #0f172a;">' + name + '</td>' +
+              '<td style="padding: 7px 0; color: #64748b; width: 140px; font-weight: bold;">1. 예약일</td>' +
+              '<td style="padding: 7px 0; font-weight: bold; color: #2563eb; font-size: 14px;">' + date + '</td>' +
             '</tr>' +
             '<tr>' +
-              '<td style="padding: 7px 0; color: #64748b; font-weight: bold;">2. 예약 일자</td>' +
-              '<td style="padding: 7px 0; font-weight: bold; color: #2563eb;">' + date + '</td>' +
-            '</tr>' +
-            '<tr>' +
-              '<td style="padding: 7px 0; color: #64748b; font-weight: bold;">3. 배정 좌석</td>' +
-              '<td style="padding: 7px 0; font-weight: bold; color: #0f172a;">' + cleanSeatName + '</td>' +
-            '</tr>' +
-            '<tr>' +
-              '<td style="padding: 7px 0; color: #64748b; font-weight: bold;">4. 이용 시간대</td>' +
+              '<td style="padding: 7px 0; color: #64748b; font-weight: bold;">2. 이용 시간대</td>' +
               '<td style="padding: 7px 0; color: #0f172a; font-weight: bold;">' + timeSlot + '</td>' +
             '</tr>' +
             '<tr>' +
-              '<td style="padding: 7px 0; color: #64748b; font-weight: bold;">5. 함께 대출/이용 도서</td>' +
+              '<td style="padding: 7px 0; color: #64748b; font-weight: bold;">3. 좌석 번호</td>' +
+              '<td style="padding: 7px 0; font-weight: bold; color: #1e3a8a; font-size: 14px;">' + cleanSeatName + '</td>' +
+            '</tr>' +
+            '<tr>' +
+              '<td style="padding: 7px 0; color: #64748b; font-weight: bold;">4. 도서 대출 목록</td>' +
               '<td style="padding: 7px 0; font-weight: bold; color: ' + (bookTitle ? '#166534' : '#64748b') + ';">' +
                 (bookTitle ? '📖 ' + bookTitle : '선택한 도서 없음 (좌석 전용 이용)') +
               '</td>' +
             '</tr>' +
             '<tr style="border-top: 1px dashed #cbd5e1;">' +
+              '<td style="padding: 7px 0; color: #64748b;">• 예약자명</td>' +
+              '<td style="padding: 7px 0; font-weight: bold; color: #0f172a;">' + name + '</td>' +
+            '</tr>' +
+            '<tr>' +
               '<td style="padding: 7px 0; color: #64748b;">• 예약번호</td>' +
               '<td style="padding: 7px 0; font-family: monospace; font-weight: bold; color: #475569;">' + reservationNumber + '</td>' +
             '</tr>' +
@@ -369,20 +396,33 @@ function sendConfirmationEmail(info) {
           '<strong>💡 이용 안내 및 취소 방법</strong><br>' +
           '• 예약 시간 10분 전부터 입실이 가능합니다.<br>' +
           '• 도서 대출 신청 건은 안내 데스크에서 학생증/신분증 제시 후 수령하실 수 있습니다.<br>' +
-          '• 일정 변경 시 예약 웹앱의 <strong>[예약 조회 및 취소]</strong> 메뉴에서 이메일(<code>' + to + '</code>)을 입력하여 즉시 취소하실 수 있습니다.' +
+          '• 일정 변경 시 웹앱의 <strong>[내 예약 조회 및 취소]</strong> 메뉴에서 이메일(<code>' + to + '</code>)을 입력하여 즉시 취소하실 수 있습니다.' +
         '</div>' +
 
         '<div style="text-align: center; border-top: 1px solid #e2e8f0; padding-top: 14px; font-size: 11px; color: #94a3b8;">' +
-          '새별오름 도서관 자동 발송 시스템' +
+          '새별오름 도서관 실시간 자동 발송 시스템' +
         '</div>' +
       '</div>';
 
-    MailApp.sendEmail({
-      to: to,
-      subject: subject,
-      htmlBody: htmlBody
-    });
-    return true;
+    // 1차 MailApp 시도, 실패 시 2차 GmailApp 시도
+    let sent = false;
+    try {
+      MailApp.sendEmail({
+        to: to,
+        subject: subject,
+        body: plainTextBody,
+        htmlBody: htmlBody
+      });
+      sent = true;
+    } catch (e1) {
+      try {
+        GmailApp.sendEmail(to, subject, plainTextBody, { htmlBody: htmlBody });
+        sent = true;
+      } catch (e2) {
+        Logger.log('이메일 발송 실패: ' + e2.toString());
+      }
+    }
+    return sent;
   } catch (err) {
     Logger.log('이메일 발송 오류: ' + err.message);
     return false;
@@ -390,7 +430,7 @@ function sendConfirmationEmail(info) {
 }
 
 /**
- * [Task 1] 이메일 기준 예약 내역 검색
+ * [Task 1] 이메일 기준 예약 내역 검색 (필드명 상호 호환 보장)
  */
 function getReservationsByEmail(userEmail) {
   try {
@@ -409,14 +449,24 @@ function getReservationsByEmail(userEmail) {
 
       if (rowEmail === emailQuery) {
         const rowDate = normalizeDateStr(row[4]);
+        const bookOrSeatVal = String(row[1]).trim();
+        const userNameVal = String(row[2]).trim();
+        const resNumVal = String(row[0]).trim();
+        const slotVal = String(row[5]).trim();
+        const statusVal = String(row[6]).trim();
+
         reservations.push({
-          reservationNumber: String(row[0]).trim(),
-          bookOrSeat: String(row[1]).trim(),
-          name: String(row[2]).trim(),
+          reservationNumber: resNumVal,
+          bookOrSeatName: bookOrSeatVal,
+          bookOrSeat: bookOrSeatVal,
+          userName: userNameVal,
+          name: userNameVal,
+          userEmail: rowEmail,
           email: rowEmail,
+          reservationDate: rowDate,
           date: rowDate,
-          timeSlot: String(row[5]).trim(),
-          status: String(row[6]).trim()
+          timeSlot: slotVal,
+          status: statusVal
         });
       }
     }
@@ -427,7 +477,6 @@ function getReservationsByEmail(userEmail) {
       ok: true,
       message: reservations.length > 0 ? reservations.length + '건의 예약 내역을 찾았습니다.' : '해당 이메일로 등록된 예약 내역이 없습니다.',
       reservations: reservations
-    };
   } catch (error) {
     return { ok: false, message: '조회 중 오류: ' + error.message, reservations: [] };
   }

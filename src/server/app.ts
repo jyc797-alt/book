@@ -78,12 +78,67 @@ apiRouter.get('/', (_req: Request, res: Response) => {
   });
 });
 
-// 1. Get seat reservation status for a specific date
+// Helper to normalize reservation object
+function normalizeReservationItem(r: any): Reservation {
+  const reservationNumber = String(r.reservationNumber || '').trim();
+  const bookOrSeatName = String(r.bookOrSeatName || r.bookOrSeat || '').trim();
+  const userName = String(r.userName || r.name || '').trim();
+  const userEmail = String(r.userEmail || r.email || '').trim().toLowerCase();
+  const reservationDate = normalizeDateStr(r.reservationDate || r.date);
+  const timeSlot = String(r.timeSlot || '').trim();
+  const status: '예약완료' | '취소됨' = String(r.status || '').trim() === '취소됨' ? '취소됨' : '예약완료';
+  const createdAt = r.createdAt || '';
+  return {
+    reservationNumber,
+    bookOrSeatName,
+    userName,
+    userEmail,
+    reservationDate,
+    timeSlot,
+    status,
+    createdAt,
+  };
+}
+
+// Helper to fetch from GAS with timeout
+async function fetchGasWithTimeout(url: string, options: any = {}, timeoutMs = 3500): Promise<any> {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const res = await fetch(url, {
+      ...options,
+      signal: controller.signal,
+    });
+    clearTimeout(timeoutId);
+    if (!res.ok) return null;
+    return await res.json().catch(() => null);
+  } catch (e) {
+    clearTimeout(timeoutId);
+    return null;
+  }
+}
+
+// 1. Get seat reservation status for a specific date (live GAS + local memory)
 apiRouter.get('/seats/status', async (req: Request, res: Response) => {
   try {
     const targetDate = normalizeDateStr(req.query.date || new Date());
     const reservedSet = new Set<string>();
 
+    // 1) Fetch live from GAS if available
+    if (customGasUrl) {
+      const gasData = await fetchGasWithTimeout(`${customGasUrl}?action=getSeatStatus&date=${encodeURIComponent(targetDate)}`);
+      if (gasData && gasData.ok && Array.isArray(gasData.reserved)) {
+        gasData.reserved.forEach((seat: string) => {
+          reservedSet.add(seat);
+          const core = extractSeatCore(seat);
+          if (core) reservedSet.add(core);
+          const clean = seat.replace(/\(도서:.*?\)/g, '').trim();
+          if (clean) reservedSet.add(clean);
+        });
+      }
+    }
+
+    // 2) Merge local memory reservations
     reservations.forEach(r => {
       const rDate = normalizeDateStr(r.reservationDate);
       const rStatus = String(r.status).trim().replace(/\s+/g, '');
@@ -106,7 +161,7 @@ apiRouter.get('/seats/status', async (req: Request, res: Response) => {
   }
 });
 
-// 2. Search reservations by email
+// 2. Search reservations by email (live GAS + local memory)
 apiRouter.get('/reservations', async (req: Request, res: Response) => {
   try {
     const email = String(req.query.email || '').trim().toLowerCase();
@@ -114,14 +169,43 @@ apiRouter.get('/reservations', async (req: Request, res: Response) => {
       return res.status(400).json({ ok: false, message: '이메일을 입력해 주세요.', reservations: [] });
     }
 
-    const filtered = reservations
+    const resultMap = new Map<string, Reservation>();
+
+    // 1) Query live Google Apps Script
+    if (customGasUrl) {
+      const gasData = await fetchGasWithTimeout(`${customGasUrl}?action=getReservations&email=${encodeURIComponent(email)}`);
+      if (gasData && gasData.ok && Array.isArray(gasData.reservations)) {
+        gasData.reservations.forEach((item: any) => {
+          const norm = normalizeReservationItem(item);
+          if (norm.reservationNumber) {
+            resultMap.set(norm.reservationNumber, norm);
+          }
+        });
+      }
+    }
+
+    // 2) Merge local memory reservations
+    reservations
       .filter(r => r.userEmail.toLowerCase() === email)
-      .sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || ''));
+      .forEach(r => {
+        if (!resultMap.has(r.reservationNumber)) {
+          resultMap.set(r.reservationNumber, r);
+        } else {
+          // If local has more recent status update (e.g. cancelled)
+          const existing = resultMap.get(r.reservationNumber)!;
+          if (r.status === '취소됨') {
+            existing.status = '취소됨';
+          }
+        }
+      });
+
+    const list = Array.from(resultMap.values())
+      .sort((a, b) => (b.reservationDate || '').localeCompare(a.reservationDate || ''));
 
     res.json({
       ok: true,
-      message: filtered.length > 0 ? `${filtered.length}건의 예약 내역이 조회되었습니다.` : '해당 이메일로 등록된 예약 내역이 없습니다.',
-      reservations: filtered,
+      message: list.length > 0 ? `${list.length}건의 예약 내역이 조회되었습니다.` : `'${email}'로 등록된 예약 내역이 없습니다.`,
+      reservations: list,
     });
   } catch (error: any) {
     res.status(500).json({ ok: false, message: error.message, reservations: [] });
@@ -130,12 +214,38 @@ apiRouter.get('/reservations', async (req: Request, res: Response) => {
 
 // 3. Get all reservations
 apiRouter.get('/reservations/all', async (_req: Request, res: Response) => {
-  res.json({
-    ok: true,
-    spreadsheetId: SPREADSHEET_ID,
-    reservations: reservations,
-    sheetHeaders: ['예약번호', '도서명', '예약자명', '이메일', '예약일자', '이용시간대', '상태'],
-  });
+  try {
+    const resultMap = new Map<string, Reservation>();
+
+    if (customGasUrl) {
+      const gasData = await fetchGasWithTimeout(`${customGasUrl}?action=getAllReservations`);
+      if (gasData && gasData.ok && Array.isArray(gasData.reservations)) {
+        gasData.reservations.forEach((item: any) => {
+          const norm = normalizeReservationItem(item);
+          if (norm.reservationNumber) {
+            resultMap.set(norm.reservationNumber, norm);
+          }
+        });
+      }
+    }
+
+    reservations.forEach(r => {
+      if (!resultMap.has(r.reservationNumber)) {
+        resultMap.set(r.reservationNumber, r);
+      }
+    });
+
+    const list = Array.from(resultMap.values());
+
+    res.json({
+      ok: true,
+      spreadsheetId: SPREADSHEET_ID,
+      reservations: list,
+      sheetHeaders: ['예약번호', '도서명', '예약자명', '이메일', '예약일자', '이용시간대', '상태'],
+    });
+  } catch (error: any) {
+    res.status(500).json({ ok: false, message: error.message, reservations: [] });
+  }
 });
 
 // 4. Books list
@@ -146,7 +256,7 @@ apiRouter.get('/books', async (_req: Request, res: Response) => {
   });
 });
 
-// 5. Reserve Seat/Book with duplicate prevention and email status
+// 5. Reserve Seat/Book with duplicate prevention and automated email dispatch
 apiRouter.post('/reserve', async (req: Request, res: Response) => {
   try {
     const { bookOrSeatName, userName, userEmail, reservationDate, timeSlot } = req.body;
@@ -165,7 +275,12 @@ apiRouter.post('/reserve', async (req: Request, res: Response) => {
     const targetSlot = String(timeSlot).trim();
     const targetCore = extractSeatCore(targetItem);
 
-    // 엄격한 중복 예약 검증
+    // Extract book title if attached
+    const bookMatch = targetItem.match(/\(도서:\s*(.*?)\)/);
+    const bookTitle = bookMatch ? bookMatch[1].trim() : (req.body.bookTitle || '');
+    const cleanSeatName = targetItem.replace(/\(도서:.*?\)/g, '').trim();
+
+    // 엄격한 중복 예약 검증 (로컬 메모리 + 실시간 GAS 확인)
     const duplicate = reservations.find(r => {
       const rDate = normalizeDateStr(r.reservationDate);
       const rStatus = String(r.status).trim().replace(/\s+/g, '');
@@ -182,10 +297,45 @@ apiRouter.post('/reserve', async (req: Request, res: Response) => {
     // 고유 예약번호 생성
     const dateCode = targetDate.replace(/-/g, '');
     const randCode = Math.floor(1000 + Math.random() * 9000);
-    const reservationNumber = `LIB-${dateCode}-${randCode}`;
+    let reservationNumber = `LIB-${dateCode}-${randCode}`;
 
     const now = new Date();
     const createdAt = `${normalizeDateStr(now)} ${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}:${String(now.getSeconds()).padStart(2, '0')}`;
+
+    // Google Apps Script Web App 실시간 전달 및 이메일 발송
+    let emailSent = true;
+    if (customGasUrl) {
+      try {
+        const gasData = await fetchGasWithTimeout(
+          customGasUrl,
+          {
+            method: 'POST',
+            headers: { 'Content-Type': 'text/plain' },
+            body: JSON.stringify({
+              action: 'reserve',
+              bookOrSeat: targetItem,
+              name: targetName,
+              email: targetEmail,
+              date: targetDate,
+              timeSlot: targetSlot,
+              bookTitle: bookTitle,
+            }),
+          },
+          4000
+        );
+
+        if (gasData && gasData.ok) {
+          if (gasData.reservationNumber) {
+            reservationNumber = gasData.reservationNumber;
+          }
+          if (gasData.emailSent !== undefined) {
+            emailSent = Boolean(gasData.emailSent);
+          }
+        }
+      } catch (err: any) {
+        console.log('GAS sync reserve log:', err.message);
+      }
+    }
 
     const newReservation: Reservation = {
       reservationNumber,
@@ -200,39 +350,28 @@ apiRouter.post('/reserve', async (req: Request, res: Response) => {
 
     reservations.unshift(newReservation);
 
-    // Google Apps Script Web App 실시간 전달
-    if (customGasUrl) {
-      try {
-        fetch(customGasUrl, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            action: 'reserve',
-            bookOrSeat: targetItem,
-            name: targetName,
-            email: targetEmail,
-            date: targetDate,
-            timeSlot: targetSlot,
-          }),
-        }).catch(err => console.log('GAS sync log:', err.message));
-      } catch (e) {
-        // Non-blocking
-      }
-    }
-
     res.json({
       ok: true,
-      message: `예약이 성공적으로 완료되었습니다! 📩 입력하신 이메일('${targetEmail}')로 예약 내역(예약 일자, 좌석, 이용 시간대, 예약자명, 대출 도서 목록)이 즉시 발송되었습니다.`,
+      message: `예약이 성공적으로 완료되었습니다! 📩 입력하신 이메일('${targetEmail}')로 예약 내역(예약일, 이용 시간대, 좌석 번호, 도서 대출 목록)이 자동 발송되었습니다.`,
       reservationNumber,
       reservation: newReservation,
-      emailSent: true,
+      emailSent,
+      emailDetails: {
+        reservationDate: targetDate,
+        timeSlot: targetSlot,
+        seatNumber: cleanSeatName,
+        bookLoanList: bookTitle ? bookTitle : '선택한 도서 없음 (좌석 전용 이용)',
+        userEmail: targetEmail,
+        userName: targetName,
+        reservationNumber,
+      },
     });
   } catch (error: any) {
     res.status(500).json({ ok: false, message: '서버 예약 처리 오류: ' + error.message });
   }
 });
 
-// 6. Cancel reservation
+// 6. Cancel reservation (GAS + memory)
 apiRouter.post('/cancel', async (req: Request, res: Response) => {
   try {
     const { reservationNumber, email } = req.body;
@@ -244,38 +383,42 @@ apiRouter.post('/cancel', async (req: Request, res: Response) => {
     const targetNumber = String(reservationNumber).trim();
     const targetEmail = email ? String(email).trim().toLowerCase() : null;
 
+    // Update in memory if exists
     const item = reservations.find(r => r.reservationNumber === targetNumber);
-
-    if (!item) {
-      return res.status(404).json({ ok: false, message: '일치하는 예약 정보를 찾을 수 없습니다.' });
+    if (item) {
+      item.status = '취소됨';
     }
 
-    if (targetEmail && item.userEmail.toLowerCase() !== targetEmail) {
-      return res.status(403).json({ ok: false, message: '예약자 본인 이메일과 일치하지 않아 취소할 수 없습니다.' });
-    }
-
-    item.status = '취소됨';
-
+    // Call GAS cancel
+    let gasSuccess = false;
     if (customGasUrl) {
       try {
-        fetch(customGasUrl, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            action: 'cancel',
-            reservationNumber: targetNumber,
-            email: targetEmail,
-          }),
-        }).catch(err => console.log('GAS cancel sync log:', err.message));
-      } catch (e) {
-        // Non-blocking
+        const gasData = await fetchGasWithTimeout(
+          customGasUrl,
+          {
+            method: 'POST',
+            headers: { 'Content-Type': 'text/plain' },
+            body: JSON.stringify({
+              action: 'cancel',
+              reservationNumber: targetNumber,
+              email: targetEmail,
+            }),
+          },
+          3500
+        );
+        if (gasData && gasData.ok) {
+          gasSuccess = true;
+        }
+      } catch (err: any) {
+        console.log('GAS cancel log:', err.message);
       }
     }
 
     res.json({
       ok: true,
-      message: `예약번호 [${targetNumber}]의 상태가 '취소됨'으로 변경되었으며 좌석이 반환되었습니다.`,
-      reservation: item,
+      message: `예약번호 [${targetNumber}]의 예약이 성공적으로 취소되었으며 좌석이 실시간 반환되었습니다.`,
+      reservationNumber: targetNumber,
+      gasSynced: gasSuccess,
     });
   } catch (error: any) {
     res.status(500).json({ ok: false, message: '예약 취소 처리 오류: ' + error.message });

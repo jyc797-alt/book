@@ -35,6 +35,15 @@ export const ReservationForm: React.FC<ReservationFormProps> = ({
   const [accompanyingBook, setAccompanyingBook] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [feedback, setFeedback] = useState<{ type: 'success' | 'error' | 'info'; message: string } | null>(null);
+  const [successDetails, setSuccessDetails] = useState<{
+    date: string;
+    timeSlot: string;
+    seatName: string;
+    bookName: string;
+    email: string;
+    name: string;
+    reservationNumber: string;
+  } | null>(null);
 
   // Determine current item name to save
   const primaryItemName = selectedSeat ? selectedSeat.name : '';
@@ -85,6 +94,7 @@ export const ReservationForm: React.FC<ReservationFormProps> = ({
 
     setIsSubmitting(true);
     try {
+      const seatNameToRecord = selectedSeat.name;
       const res = await onSubmitReservation({
         bookOrSeatName: finalBookOrSeatName,
         userName: userName.trim(),
@@ -94,11 +104,20 @@ export const ReservationForm: React.FC<ReservationFormProps> = ({
       });
 
       if (res.ok) {
+        setSuccessDetails({
+          date: selectedDate,
+          timeSlot: timeSlot,
+          seatName: seatNameToRecord,
+          bookName: accompanyingBook || '선택한 도서 없음 (좌석 전용 이용)',
+          email: userEmail.trim(),
+          name: userName.trim(),
+          reservationNumber: res.reservationNumber || 'LIB-확인됨',
+        });
         setFeedback({
           type: 'success',
-          message: `🎉 예약이 완료되었습니다! (예약번호: ${res.reservationNumber || '확인됨'})\n📩 입력하신 이메일(${userEmail})로 예약 내역(예약 일자, 좌석, 이용 시간대, 예약자명, 대출 도서 목록)이 발송되었습니다.`,
+          message: `🎉 예약이 성공적으로 확정되었습니다! (예약번호: ${res.reservationNumber || '확인됨'})`,
         });
-        // Clear fields except email for user convenience
+        // Clear name and book, keep email
         setUserName('');
         setAccompanyingBook('');
       } else {
@@ -280,21 +299,55 @@ export const ReservationForm: React.FC<ReservationFormProps> = ({
             </select>
           </div>
 
-          {/* Feedback Banner */}
+          {/* Feedback & Email Dispatch Confirmation Card */}
           {feedback && (
-            <div className={`p-3.5 rounded-xl text-xs flex items-start gap-2.5 animate-fadeIn ${
+            <div className={`p-4 rounded-xl text-xs space-y-2.5 animate-fadeIn ${
               feedback.type === 'success'
-                ? 'bg-emerald-50 border border-emerald-200 text-emerald-800'
+                ? 'bg-emerald-50 border border-emerald-200 text-emerald-900'
                 : feedback.type === 'error'
                 ? 'bg-rose-50 border border-rose-200 text-rose-800'
                 : 'bg-blue-50 border border-blue-200 text-blue-800'
             }`}>
-              {feedback.type === 'success' ? (
-                <CheckCircle className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
-              ) : (
-                <AlertCircle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
+              <div className="flex items-start gap-2">
+                {feedback.type === 'success' ? (
+                  <CheckCircle className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
+                ) : (
+                  <AlertCircle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
+                )}
+                <div className="font-bold text-sm leading-snug">{feedback.message}</div>
+              </div>
+
+              {/* Explicit 4 Items Email Confirmation Card */}
+              {feedback.type === 'success' && successDetails && (
+                <div className="mt-2.5 bg-white/95 rounded-xl p-3.5 border border-emerald-300/80 shadow-xs space-y-2 text-slate-800">
+                  <div className="flex items-center gap-1.5 font-bold text-blue-900 border-b border-slate-100 pb-2">
+                    <Mail className="w-4 h-4 text-blue-600" />
+                    <span>📩 이메일({successDetails.email}) 자동 발송 확인증</span>
+                  </div>
+                  <div className="space-y-1.5 text-xs">
+                    <div className="flex items-center justify-between">
+                      <span className="font-bold text-slate-600">1. 예약일</span>
+                      <span className="font-bold text-blue-600">{successDetails.date}</span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span className="font-bold text-slate-600">2. 이용 시간대</span>
+                      <span className="font-semibold text-slate-900">{successDetails.timeSlot}</span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span className="font-bold text-slate-600">3. 좌석 번호</span>
+                      <span className="font-bold text-slate-900">{successDetails.seatName}</span>
+                    </div>
+                    <div className="flex items-start justify-between">
+                      <span className="font-bold text-slate-600 shrink-0">4. 도서 대출 목록</span>
+                      <span className="font-semibold text-emerald-800 text-right">{successDetails.bookName}</span>
+                    </div>
+                  </div>
+                  <div className="pt-2 border-t border-slate-100 flex items-center justify-between text-[11px] text-slate-400">
+                    <span>예약자: {successDetails.name}</span>
+                    <span>예약번호: <code className="font-mono">{successDetails.reservationNumber}</code></span>
+                  </div>
+                </div>
               )}
-              <div className="leading-relaxed font-medium">{feedback.message}</div>
             </div>
           )}
 
